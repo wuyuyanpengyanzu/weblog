@@ -206,11 +206,13 @@ cd "E:/git_codes/Web-Log" && mvn compile -pl weblog-module-admin -q
 
 **涉及文件：**
 - 新建：`weblog-module-admin/src/main/java/com/example/weblog/admin/dao/AdminArticleDao.java`
+- 新建：`weblog-module-admin/src/main/resources/mapper/AdminArticleDao.xml`
 
 - [ ] **步骤 1：创建目录**
 
 ```bash
 mkdir -p "E:/git_codes/Web-Log/weblog-module-admin/src/main/java/com/example/weblog/admin/dao"
+mkdir -p "E:/git_codes/Web-Log/weblog-module-admin/src/main/resources/mapper"
 ```
 
 - [ ] **步骤 2：创建 AdminArticleDao**
@@ -222,28 +224,44 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.weblog.admin.model.vo.article.ArticleDetailRspVO;
 import com.example.weblog.common.domain.mapper.ArticleMapper;
-import com.example.weblog.common.domain.dos.Article;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
 
 /**
- * 文章 DAO — 继承 common 模块的 ArticleMapper，扩展自定义分页查询（JOIN 分类表）
+ * 文章 DAO — 继承 common 模块的 ArticleMapper，扩展自定义分页查询。
+ * SQL 映射文件：resources/mapper/AdminArticleDao.xml
  */
 public interface AdminArticleDao extends ArticleMapper {
 
     /** 分页查询文章列表，LEFT JOIN 分类表拿分类名称 */
-    @Select("SELECT a.id, a.title, a.title_image as titleImage, a.description, " +
-            "a.create_time as createTime, a.update_time as updateTime, a.read_num as readNum, " +
-            "c.id as categoryId, c.name as categoryName " +
-            "FROM t_article a " +
-            "LEFT JOIN t_article_category_rel acr ON a.id = acr.article_id " +
-            "LEFT JOIN t_category c ON acr.category_id = c.id " +
-            "WHERE a.is_deleted = 0 " +
-            "AND (a.title LIKE CONCAT('%', #{searchWord}, '%') OR #{searchWord} IS NULL OR #{searchWord} = '') " +
-            "ORDER BY a.create_time DESC")
     IPage<ArticleDetailRspVO> selectArticlePage(Page<ArticleDetailRspVO> page, @Param("searchWord") String searchWord);
 }
 ```
+
+配套的 XML 映射文件：
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.weblog.admin.dao.AdminArticleDao">
+
+    <select id="selectArticlePage" resultType="com.example.weblog.admin.model.vo.article.ArticleDetailRspVO">
+        SELECT a.id, a.title, a.title_image AS titleImage, a.description,
+               a.create_time AS createTime, a.update_time AS updateTime, a.read_num AS readNum,
+               c.id AS categoryId, c.name AS categoryName
+        FROM t_article a
+        LEFT JOIN t_article_category_rel acr ON a.id = acr.article_id
+        LEFT JOIN t_category c ON acr.category_id = c.id
+        WHERE a.is_deleted = 0
+        <if test="searchWord != null and searchWord != ''">
+            AND a.title LIKE CONCAT('%', #{searchWord}, '%')
+        </if>
+        ORDER BY a.create_time DESC
+    </select>
+
+</mapper>
+```
+
+> MyBatis Plus 默认扫描 `classpath*:/mapper/**/*.xml`，无需额外配置 `mybatis-plus.mapper-locations`。
 
 - [ ] **步骤 3：验证编译**
 
