@@ -466,7 +466,7 @@ public class AdminArticleServiceImpl implements AdminArticleService {
         }
 
         PageResponse<ArticleDetailRspVO> response = new PageResponse<>();
-        response.setData(records);
+        response.setRecords(records);
         response.setTotal(result.getTotal());
         response.setSize(result.getSize());
         response.setCurrent(result.getCurrent());
