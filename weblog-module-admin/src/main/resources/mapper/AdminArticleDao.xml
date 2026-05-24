@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.weblog.admin.dao.AdminArticleDao">
+
+    <select id="selectArticlePage" resultType="com.example.weblog.admin.model.vo.article.ArticleDetailRspVO">
+        SELECT a.id, a.title, a.title_image AS titleImage, a.description,
+        a.create_time AS createTime, a.update_time AS updateTime, a.read_num AS readNum,
+        c.id AS categoryId, c.name AS categoryName
+        FROM t_article a
+        LEFT JOIN t_article_category_rel acr ON a.id = acr.article_id
+        LEFT JOIN t_category c ON acr.category_id = c.id
+        WHERE a.is_deleted = 0
+        <if test="searchWord != null and searchWord != ''">
+            AND a.title LIKE CONCAT('%', #{searchWord}, '%')
+        </if>
+        ORDER BY a.create_time DESC
+    </select>
+
+</mapper>
