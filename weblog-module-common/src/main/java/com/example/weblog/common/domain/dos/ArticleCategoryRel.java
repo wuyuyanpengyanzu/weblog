@@ -8,9 +8,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * @TableName t_article_category_rel
- */
+/** 文章-分类关联表，1:1 关系（UNIQUE INDEX on article_id） */
 @TableName(value ="t_article_category_rel")
 @Data
 @Builder

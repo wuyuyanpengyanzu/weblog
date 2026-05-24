@@ -8,9 +8,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * @TableName t_article_tag_rel
- */
+/** 文章-标签关联表，M:N 关系（无唯一约束，一篇文章可对应多个标签） */
 @TableName(value ="t_article_tag_rel")
 @Data
 @Builder

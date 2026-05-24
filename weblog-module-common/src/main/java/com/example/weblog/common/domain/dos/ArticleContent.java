@@ -8,9 +8,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * @TableName t_article_content
- */
+/** 文章正文表，与 t_article 1:1，分离大字段以提升列表查询性能 */
 @TableName(value ="t_article_content")
 @Data
 @Builder
@@ -22,5 +20,5 @@ public class ArticleContent {
 
     private Long articleId;
 
-    private String content;
+    private String content; // Markdown 正文（TEXT 类型）
 }

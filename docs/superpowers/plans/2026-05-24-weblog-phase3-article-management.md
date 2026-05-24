@@ -37,6 +37,9 @@ import lombok.Data;
 
 import java.util.List;
 
+/**
+ * 发布文章请求 VO
+ */
 @Data
 public class PublishArticleReqVO {
 
@@ -44,17 +47,17 @@ public class PublishArticleReqVO {
     private String title;
 
     @NotBlank(message = "文章正文不能为空")
-    private String content;
+    private String content; // Markdown 格式正文
 
     @NotNull(message = "文章分类不能为空")
     private Long categoryId;
 
     @NotEmpty(message = "文章标签不能为空")
-    private List<String> tags;
+    private List<String> tags; // 标签名称列表，不传 ID
 
-    private String titleImage;
+    private String titleImage; // 题图 URL
 
-    private String description;
+    private String description; // 文章摘要
 }
 ```
 
@@ -70,6 +73,9 @@ import lombok.Data;
 
 import java.util.List;
 
+/**
+ * 更新文章请求 VO
+ */
 @Data
 public class UpdateArticleReqVO {
 
@@ -80,13 +86,13 @@ public class UpdateArticleReqVO {
     private String title;
 
     @NotBlank(message = "文章正文不能为空")
-    private String content;
+    private String content; // Markdown 格式正文
 
     @NotNull(message = "文章分类不能为空")
     private Long categoryId;
 
     @NotEmpty(message = "文章标签不能为空")
-    private List<String> tags;
+    private List<String> tags; // 标签名称列表
 
     private String titleImage;
 
@@ -102,6 +108,9 @@ package com.example.weblog.admin.model.vo.article;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
+/**
+ * 删除文章请求 VO（也用于文章详情请求，共用 articleId 字段）
+ */
 @Data
 public class DeleteArticleReqVO {
 
@@ -117,14 +126,17 @@ package com.example.weblog.admin.model.vo.article;
 
 import lombok.Data;
 
+/**
+ * 文章分页查询请求 VO
+ */
 @Data
 public class ArticleListReqVO {
 
-    private Long current = 1L;
+    private Long current = 1L; // 当前页码
 
-    private Long size = 10L;
+    private Long size = 10L; // 每页条数
 
-    private String searchWord;
+    private String searchWord; // 标题搜索关键词（可选）
 }
 ```
 
@@ -139,6 +151,9 @@ import lombok.Data;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 文章详情响应 VO（也用于分页列表的每行数据，列表场景下 content 为空）
+ */
 @Data
 public class ArticleDetailRspVO {
 
@@ -150,7 +165,7 @@ public class ArticleDetailRspVO {
 
     private String description;
 
-    private String content;
+    private String content; // Markdown 正文，列表查询时不填充
 
     private Long categoryId;
 
@@ -166,6 +181,9 @@ public class ArticleDetailRspVO {
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime updateTime;
 
+    /**
+     * 标签简要信息（仅含 id 和名称）
+     */
     @Data
     public static class TagVO {
         private Long id;
@@ -208,8 +226,12 @@ import com.example.weblog.common.domain.dos.Article;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+/**
+ * 文章 DAO — 继承 common 模块的 ArticleMapper，扩展自定义分页查询（JOIN 分类表）
+ */
 public interface AdminArticleDao extends ArticleMapper {
 
+    /** 分页查询文章列表，LEFT JOIN 分类表拿分类名称 */
     @Select("SELECT a.id, a.title, a.title_image as titleImage, a.description, " +
             "a.create_time as createTime, a.update_time as updateTime, a.read_num as readNum, " +
             "c.id as categoryId, c.name as categoryName " +
@@ -550,6 +572,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 后台文章管理 Controller
+ */
 @RestController
 @RequiredArgsConstructor
 public class AdminArticleController {
@@ -577,12 +602,14 @@ public class AdminArticleController {
         return articleService.deleteArticle(reqVO);
     }
 
+    // 仅需登录，不需要 ROLE_ADMIN
     @PostMapping("/admin/article/list")
     @ApiOperationLog(description = "文章分页列表")
     public PageResponse<ArticleDetailRspVO> listArticles(@RequestBody ArticleListReqVO reqVO) {
         return articleService.listArticles(reqVO);
     }
 
+    // 仅需登录，不需要 ROLE_ADMIN
     @PostMapping("/admin/article/detail")
     @ApiOperationLog(description = "文章详情")
     public Response<ArticleDetailRspVO> getArticleDetail(@RequestBody @Valid DeleteArticleReqVO reqVO) {
@@ -629,6 +656,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.UUID;
 
+/**
+ * Minio 文件上传工具
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -637,6 +667,9 @@ public class MinioUtil {
     private final MinioClient minioClient;
     private final MinioProperties minioProperties;
 
+    /**
+     * 上传文件到 Minio，返回完整访问 URL。文件名使用 UUID 防重名。
+     */
     public String uploadFile(MultipartFile file) {
         try {
             String originalFilename = file.getOriginalFilename();
@@ -694,6 +727,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+/**
+ * 文件上传 Controller（Minio 后端上传）
+ */
 @RestController
 @RequiredArgsConstructor
 public class AdminFileController {
@@ -740,6 +776,9 @@ import com.vladsch.flexmark.html.HtmlRenderer;
 import com.vladsch.flexmark.parser.Parser;
 import com.vladsch.flexmark.util.data.MutableDataSet;
 
+/**
+ * Markdown → HTML 渲染工具，基于 flexmark。解析器静态初始化，线程安全。
+ */
 public class MarkdownUtil {
 
     private static final Parser PARSER;
@@ -748,13 +787,14 @@ public class MarkdownUtil {
     static {
         MutableDataSet options = new MutableDataSet();
         options.set(Parser.EXTENSIONS, java.util.Arrays.asList(
-                com.vladsch.flexmark.ext.tables.TablesExtension.create(),
-                com.vladsch.flexmark.ext.gfm.strikethrough.StrikethroughExtension.create()
+                com.vladsch.flexmark.ext.tables.TablesExtension.create(),           // GFM 表格
+                com.vladsch.flexmark.ext.gfm.strikethrough.StrikethroughExtension.create() // 删除线
         ));
         PARSER = Parser.builder(options).build();
         RENDERER = HtmlRenderer.builder(options).build();
     }
 
+    /** 将 Markdown 文本渲染为 HTML */
     public static String parse2Html(String markdown) {
         if (markdown == null || markdown.isEmpty()) {
             return "";

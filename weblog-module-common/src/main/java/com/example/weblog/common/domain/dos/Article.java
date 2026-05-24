@@ -9,9 +9,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * @TableName t_article
- */
+/** 文章主表 */
 @TableName(value ="t_article")
 @Data
 @Builder
@@ -23,9 +21,9 @@ public class Article {
 
     private String title;
 
-    private String titleImage;
+    private String titleImage; // 题图 URL
 
-    private String description;
+    private String description; // 文章摘要
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
@@ -36,5 +34,5 @@ public class Article {
     @TableLogic
     private Integer isDeleted;
 
-    private Integer readNum;
+    private Integer readNum; // 阅读次数
 }

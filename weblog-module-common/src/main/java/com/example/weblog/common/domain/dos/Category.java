@@ -9,9 +9,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * @TableName t_category
- */
+/** 文章分类表，名称唯一（UNIQUE INDEX on name） */
 @TableName(value ="t_category")
 @Data
 @Builder

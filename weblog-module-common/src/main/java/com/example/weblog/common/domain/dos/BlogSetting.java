@@ -8,9 +8,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * @TableName t_blog_setting
- */
+/** 博客设置表，单例模式（只有一行，id=1），通过 saveOrUpdate 维护 */
 @TableName(value ="t_blog_setting")
 @Data
 @Builder
@@ -26,7 +24,7 @@ public class BlogSetting {
 
     private String introduction;
 
-    private String avatar;
+    private String avatar; // 头像 URL
 
     private String githubHome;
 

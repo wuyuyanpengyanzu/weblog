@@ -9,9 +9,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * @TableName t_user
- */
+/** 用户表 */
 @TableName(value ="t_user")
 @Data
 @Builder
@@ -24,7 +22,7 @@ public class User {
 
     private String userName;
 
-    private String password;
+    private String password; // BCrypt 加密存储
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
