@@ -4,9 +4,9 @@
 
 **目标：** 搭建完整的 Maven 多模块项目骨架，包含全部 DO、Mapper、公共类及配置——在 Spring Boot 3.4.5 上编译通过并启动成功。
 
-**架构：** 四个 Maven 模块（common → jwt → admin → web），基于 Spring Boot 3.4.5、MyBatis Plus 3.5.9 和 Spring Security 6.x。全程使用 Jakarta EE 命名空间。
+**架构：** 四个 Maven 模块（common → jwt → admin → web），基于 Spring Boot 3.4.5、MyBatis Plus 3.5.9 和 sa-token。全程使用 Jakarta EE 命名空间。
 
-**技术栈：** Spring Boot 3.4.5、MyBatis Plus 3.5.9、jjwt 0.12.6、Minio 8.5.11、Guava 33.4.0、flexmark 0.64.8、ip2region 2.7.0、MapStruct 1.6.3、p6spy 1.10.0
+**技术栈：** Spring Boot 3.4.5、MyBatis Plus 3.5.9、sa-token 1.42.0、Minio 8.5.11、Guava 33.4.0、flexmark 0.64.8、ip2region 2.7.0、MapStruct 1.6.3、p6spy 1.10.0
 
 ---
 
@@ -51,7 +51,7 @@
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <mybatis-plus.version>3.5.9</mybatis-plus.version>
-        <jjwt.version>0.12.6</jjwt.version>
+        <sa-token.version>1.42.0</sa-token.version>
         <minio.version>8.5.11</minio.version>
         <guava.version>33.4.0-jre</guava.version>
         <flexmark.version>0.64.8</flexmark.version>
@@ -73,21 +73,14 @@
                 <version>${mybatis-plus.version}</version>
             </dependency>
             <dependency>
-                <groupId>io.jsonwebtoken</groupId>
-                <artifactId>jjwt-api</artifactId>
-                <version>${jjwt.version}</version>
+                <groupId>cn.dev33</groupId>
+                <artifactId>sa-token-spring-boot3-starter</artifactId>
+                <version>${sa-token.version}</version>
             </dependency>
             <dependency>
-                <groupId>io.jsonwebtoken</groupId>
-                <artifactId>jjwt-impl</artifactId>
-                <version>${jjwt.version}</version>
-                <scope>runtime</scope>
-            </dependency>
-            <dependency>
-                <groupId>io.jsonwebtoken</groupId>
-                <artifactId>jjwt-jackson</artifactId>
-                <version>${jjwt.version}</version>
-                <scope>runtime</scope>
+                <groupId>cn.dev33</groupId>
+                <artifactId>sa-token-jwt</artifactId>
+                <version>${sa-token.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.minio</groupId>
@@ -1247,11 +1240,10 @@ cd "E:/git_codes/Web_Blog" && mvn compile -pl weblog-module-common
 
 ---
 
-### 任务 8：创建 weblog-module-jwt 模块（POM + JwtTokenHelper + ResultUtil）
+### 任务 8：创建 weblog-module-jwt 模块（POM + ResultUtil）
 
 **涉及文件：**
 - 新建：`weblog-module-jwt/pom.xml`
-- 新建：`weblog-module-jwt/src/main/java/com/quanxiaoha/weblog/jwt/JwtTokenHelper.java`
 - 新建：`weblog-module-jwt/src/main/java/com/quanxiaoha/weblog/jwt/utils/ResultUtil.java`
 
 - [ ] **步骤 1：创建 jwt 模块目录和 POM**
@@ -1283,91 +1275,18 @@ mkdir -p "E:/git_codes/Web_Blog/weblog-module-jwt/src/main/java/com/quanxiaoha/w
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security</artifactId>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-spring-boot3-starter</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-impl</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-jackson</artifactId>
-            <scope>runtime</scope>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-jwt</artifactId>
         </dependency>
     </dependencies>
 </project>
 ```
 
-- [ ] **步骤 2：创建 JwtTokenHelper（使用 jjwt 0.12.x 新 API）**
-
-```java
-package com.quanxiaoha.weblog.jwt;
-
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
-
-import javax.crypto.SecretKey;
-import java.nio.charset.StandardCharsets;
-import java.util.Date;
-
-@Component
-public class JwtTokenHelper {
-
-    @Value("${jwt.secret-key}")
-    private String secretKey;
-
-    @Value("${jwt.expiration-time}")
-    private long expirationTime;
-
-    public String generateToken(String username) {
-        SecretKey key = Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
-        Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + expirationTime);
-
-        return Jwts.builder()
-                .subject(username)
-                .issuer("weblog")
-                .issuedAt(now)
-                .expiration(expiryDate)
-                .signWith(key)
-                .compact();
-    }
-
-    public String getUsernameFromToken(String token) {
-        Claims claims = parseToken(token);
-        return claims.getSubject();
-    }
-
-    public boolean validateToken(String token) {
-        try {
-            parseToken(token);
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private Claims parseToken(String token) {
-        SecretKey key = Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
-        return Jwts.parser()
-                .verifyWith(key)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-    }
-}
-```
-
-- [ ] **步骤 3：创建 ResultUtil（向 HttpServletResponse 写 JSON）**
+- [ ] **步骤 2：创建 ResultUtil（向 HttpServletResponse 写 JSON 的工具）**
 
 ```java
 package com.quanxiaoha.weblog.jwt.utils;
@@ -1392,13 +1311,15 @@ public class ResultUtil {
 }
 ```
 
-- [ ] **步骤 4：验证编译**
+- [ ] **步骤 3：验证编译**
 
 ```bash
 cd "E:/git_codes/Web_Blog" && mvn compile -pl weblog-module-jwt
 ```
 
 预期：BUILD SUCCESS
+
+> 说明：sa-token 的 `SaTokenConfig`（路由拦截）和 `StpInterfaceImpl`（角色加载）将在阶段二创建。阶段一只搭建 jwt 模块骨架。
 
 ---
 
@@ -1703,82 +1624,17 @@ cd "E:/git_codes/Web_Blog" && mvn compile
 
 ---
 
-### 任务 11：启动必需的占位类（Security 基础配置）
+### 任务 11：验证全量编译
 
-**涉及文件：**
-- 新建：`weblog-module-admin/src/main/java/com/quanxiaoha/weblog/admin/config/WebSecurityConfig.java`
-- 新建：`weblog-module-admin/src/main/java/com/quanxiaoha/weblog/admin/service/impl/UserDetailServiceImpl.java`
-
-这两个类是 Spring Security 自动装配所需的 Bean，否则启动会报错。完整实现在阶段二完成。
-
-- [ ] **步骤 1：创建占位 WebSecurityConfig（Spring Security 6.x Bean 风格）**
-
-```java
-package com.quanxiaoha.weblog.admin.config;
-
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.web.SecurityFilterChain;
-
-@Configuration
-@EnableWebSecurity
-public class WebSecurityConfig {
-
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-                .csrf(csrf -> csrf.disable())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/**").permitAll()
-                        .anyRequest().authenticated()
-                );
-        return http.build();
-    }
-}
-```
-
-- [ ] **步骤 2：创建占位 UserDetailServiceImpl**
-
-```java
-package com.quanxiaoha.weblog.admin.service.impl;
-
-import com.quanxiaoha.weblog.common.domain.mapper.UserMapper;
-import com.quanxiaoha.weblog.common.domain.mapper.UserRoleMapper;
-import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.stereotype.Service;
-
-import java.util.Collections;
-
-@Service
-@RequiredArgsConstructor
-public class UserDetailServiceImpl implements UserDetailsService {
-
-    private final UserMapper userMapper;
-    private final UserRoleMapper userRoleMapper;
-
-    @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        // 占位实现 — 阶段二完善
-        return new User(username, "", Collections.emptyList());
-    }
-}
-```
-
-- [ ] **步骤 3：全量编译验证**
+- [ ] **步骤 1：全量编译验证**
 
 ```bash
 cd "E:/git_codes/Web_Blog" && mvn compile
 ```
 
-预期：BUILD SUCCESS
+预期：全部模块 BUILD SUCCESS
+
+> 说明：认证模块（sa-token 配置、登录接口、权限加载）将在阶段二完成。阶段一不包含认证相关代码，`/login` 和 `/admin/**` 路径暂时无保护。
 
 ---
 

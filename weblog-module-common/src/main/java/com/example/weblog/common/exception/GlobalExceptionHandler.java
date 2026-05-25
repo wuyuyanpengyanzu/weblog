@@ -1,5 +1,7 @@
 package com.example.weblog.common.exception;
 
+import cn.dev33.satoken.exception.NotLoginException;
+import cn.dev33.satoken.exception.NotRoleException;
 import com.example.weblog.common.enums.ResponseCodeEnum;
 import com.example.weblog.common.utils.Response;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +28,20 @@ public class GlobalExceptionHandler {
         e.getBindingResult().getFieldErrors().forEach(error ->
                 sb.append(error.getField()).append(": ").append(error.getDefaultMessage()).append("; "));
         return Response.fail(ResponseCodeEnum.PARAM_ERROR.getErrorCode(), sb.toString());
+    }
+
+    @ExceptionHandler(NotLoginException.class)
+    @ResponseBody
+    public Response<?> handleNotLoginException(NotLoginException e) {
+        return Response.fail(ResponseCodeEnum.UNAUTHORIZED.getErrorCode(),
+                ResponseCodeEnum.UNAUTHORIZED.getErrorMessage());
+    }
+
+    @ExceptionHandler(NotRoleException.class)
+    @ResponseBody
+    public Response<?> handleNotRoleException(NotRoleException e) {
+        return Response.fail(ResponseCodeEnum.FORBIDDEN.getErrorCode(),
+                ResponseCodeEnum.FORBIDDEN.getErrorMessage());
     }
 
     @ExceptionHandler(Exception.class)

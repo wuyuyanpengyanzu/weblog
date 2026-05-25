@@ -7,7 +7,7 @@
 ```
 Web_Blog/                          # 父 POM（版本管理）
 ├── weblog-module-common/          # 基础设施：DO、Mapper、AOP、异常、工具、MyBatis Plus 配置
-├── weblog-module-jwt/             # JWT 认证：过滤器、Token 工具、Security 配置
+├── weblog-module-jwt/             # sa-token 认证：路由拦截配置
 ├── weblog-module-admin/           # 后台业务：Controller、Service、DAO、Minio
 ├── weblog-web/                    # 启动入口 + 前台展示 + 配置文件
 └── sql/                           # 数据库脚本（已有 schema.sql + data.sql）
@@ -25,8 +25,7 @@ Web_Blog/                          # 父 POM（版本管理）
 |------|------|------|
 | Spring Boot | 3.4.5 | 核心框架 |
 | MyBatis Plus | 3.5.9 | ORM + 分页 |
-| Spring Security | 6.x (随 Boot 3.4.5) | 认证授权 |
-| jjwt | 0.12.6 | JWT Token 生成/校验 |
+| sa-token | 1.42.0 | 认证授权（JWT 模式） |
 | Minio | 8.5.11 | 对象存储（博客图片） |
 | flexmark | 0.64.8 | Markdown 转 HTML |
 | Guava | 33.4.0 | EventBus |
@@ -39,8 +38,7 @@ Web_Blog/                          # 父 POM（版本管理）
 ## 三、Spring Boot 3.x 适配要点
 
 - **javax.* → jakarta.***：Servlet、Validation、Persistence 全部改包名
-- **Spring Security 6.x**：`WebSecurityConfigurerAdapter` 已移除，用 `@Bean` 风格的 `SecurityFilterChain`；`authorizeRequests()` → `authorizeHttpRequests()`；`antMatchers()` → `requestMatchers()`
-- **jjwt 0.12.x**：`signWith(SignatureAlgorithm.HS512, key)` → `signWith(Keys.hmacShaKeyFor(keyBytes))`；`parser()` → `parserBuilder()` 变为 `Jwts.parser().verifyWith(key)`
+- **sa-token**：使用 `sa-token-spring-boot3-starter`，天然兼容 Spring Boot 3.x；JWT 模式通过 `token-style: jwt` 配置启用
 - **p6spy**：使用 `p6spy-spring-boot-starter`，通过 application.yaml 配置
 - **MyBatis Plus 3.5.9**：分页插件配置方式保持不变，兼容 Spring Boot 3
 
@@ -89,14 +87,12 @@ t_blog_setting             ← 博客设置单例表
 - 启动类 + application.yaml + application-dev.yaml
 - **目标：编译通过，Spring Boot 启动成功**
 
-### 阶段二：JWT 认证
-- Spring Security 6.x Bean 风格配置
-- JwtTokenHelper（jjwt 0.12.x 新 API）
-- JwtAuthenticationLoginFilter（POST /login 拦截）
-- TokenAuthenticationFilter（后续请求校验）
-- UserDetailServiceImpl
-- 登录成功/失败 Handler
-- RestAuthenticationEntryPoint + RestAccessDeniedHandler
+### 阶段二：sa-token 认证
+- sa-token-spring-boot3-starter + sa-token-jwt 依赖
+- SaTokenConfig 路由拦截（`/admin/**` 需登录，放行 `/login`）
+- AuthController（登录接口：BCrypt 验密 → `StpUtil.login()` → 返回 JWT Token）
+- StpInterfaceImpl（DB 角色加载）
+- application.yaml 配置 JWT 模式
 - **目标：POST /login 调通，返回 JWT Token**
 
 ### 阶段三：后台文章管理
@@ -150,7 +146,7 @@ t_blog_setting             ← 博客设置单例表
 - 文章和标签 M:N（关联表无唯一约束）
 - 用户和角色无 FK 约束，用 username 字符串关联
 - Token 不存角色，每次请求从 DB 重新加载
-- 登录 Filter 和 Token Filter 分离，职责独立
+- 登录逻辑在 Controller 中手动验密，Token 校验由 sa-token 拦截器自动完成
 - 双重事务：方法级 @Transactional + TransactionTemplate
 - 批量插入标签关联：自定义 MyBaseMapper.insertBatchSomeColumn()
 - 博客设置单例表：只有一行 id=1

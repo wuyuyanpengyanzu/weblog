@@ -21,7 +21,7 @@ WeBlog 是一款 **Spring Boot 2.6.3 + Vue 3.2 + Vite 4.3** 开发的前后端�
 
 ### 技术栈速览
 
-**后端：** Spring Boot 2.6.3, MyBatis Plus 3.5.2, Spring Security, JWT (jjwt 0.11.2), Minio 8.2.1, flexmark 0.62.2 (Markdown 渲染), Guava 18.0 (EventBus), ip2region (IP 归属地), HikariCP, p6spy (SQL 日志), MapStruct (DO↔VO 转换), Hibernate Validator
+**后端：** Spring Boot 2.6.3, MyBatis Plus 3.5.2, sa-token (认证授权), Minio 8.2.1, flexmark 0.62.2 (Markdown 渲染), Guava 18.0 (EventBus), ip2region (IP 归属地), HikariCP, p6spy (SQL 日志), MapStruct (DO↔VO 转换), Hibernate Validator
 
 **前端：** Vue 3.2.47, Vue Router 4.1.6 (hash 模式), Vuex 4.0.2, Element Plus 2.3.3, ECharts 5.4.2, md-editor-v3 (Markdown 编辑器), WindiCSS (Tailwind), Axios, GSAP (动画), NProgress (进度条)
 
@@ -68,7 +68,7 @@ E:\WeBlog\
 ```
 weblog-module-common     ← 基础设施：DO、Mapper、AOP、异常、工具、MyBatis Plus 配置
         ↑
-weblog-module-jwt        ← JWT Token 生成/校验、Security 过滤器链
+weblog-module-jwt        ← sa-token 路由拦截配置
         ↑
 weblog-module-admin      ← 后台业务：文章 CRUD、分类/标签管理、文件上传
         ↑
@@ -87,7 +87,7 @@ weblog-web               ← 启动入口 + 前台展示业务 + 所有配置文
   → 页面组件 mounted() 调用 API
   → Axios 请求拦截器（自动附加 Authorization: Bearer <token>）
   → Vite 开发代理（/api → localhost:8081，去掉 /api 前缀）
-  → TokenAuthenticationFilter（校验 Token，重建 SecurityContext）
+  → SaTokenInterceptor（校验 Token，自动续期）
   → Controller（@ApiOperationLog AOP 记录日志 + 访客）
   → Service（业务逻辑，可能发布 EventBus 事件）
   → DAO → Mapper（MyBatis Plus）→ MySQL
@@ -139,22 +139,17 @@ t_blog_setting             ← 博客设置单例表（只有一行，id=1）
 
 ### 3.1 登录认证
 
-**核心链路：** `login.vue` → `POST /login` → `JwtAuthenticationLoginFilter` → `DaoAuthenticationProvider`(密码验证) → `JwtTokenHelper.generateToken()` → 返回 Token → 前端存 Cookie → 跳转仪表盘
+**核心链路：** `login.vue` → `POST /login` → `AuthController.login()` → BCrypt 手动验密 → `StpUtil.login(username)` → sa-token 生成 JWT Token → 返回 Token → 前端存 Cookie → 跳转仪表盘
 
 #### 后端关键文件及职责
 
 | 文件 | 路径 | 职责 |
 |------|------|------|
-| WebSecurityConfig | `weblog-module-admin/.../config/WebSecurityConfig.java` | Security 过滤器链：放行 `/login`，保护 `/admin/**`，STATELESS 会话，注册 JWT 过滤器 |
+| SaTokenConfig | `weblog-module-jwt/.../SaTokenConfig.java` | sa-token 路由拦截：`/admin/**` 需登录，放行 `/login` |
+| AuthController | `weblog-module-jwt/.../controller/AuthController.java` | 登录接口：查用户 → BCrypt 验密 → `StpUtil.login()` → 返回 Token |
 | PasswordEncoderConfig | `weblog-module-admin/.../config/PasswordEncoderConfig.java` | BCryptPasswordEncoder Bean |
-| JwtAuthenticationLoginFilter | `weblog-module-jwt/.../JwtAuthenticationLoginFilter.java` | 只处理 `POST /login`：JSON 解析凭证 → `AuthenticationManager.authenticate()` → 成功后生成 Token |
-| JwtAuthenticationSecurityConfig | `weblog-module-jwt/.../JwtAuthenticationSecurityConfig.java` | 组装 `DaoAuthenticationProvider`（注入 UserDetailsService + PasswordEncoder），注册登录过滤器 |
-| JwtTokenHelper | `weblog-module-jwt/.../JwtTokenHelper.java` | Token 生成（HS512, 24h 过期）、校验、解析。Claims 只存 sub/iss/iat/exp，**不存角色** |
-| TokenAuthenticationFilter | `weblog-module-jwt/.../TokenAuthenticationFilter.java` | 每个请求：从 `Authorization: Bearer <token>` 提取 Token → 校验 → 重建 SecurityContext（重新查 DB 加载角色） |
-| LoginAuthenticationSuccessHandler | `weblog-module-jwt/.../LoginAuthenticationSuccessHandler.java` | 登录成功返回 `{success:true, data:{token:"..."}}` |
-| LoginAuthenticationFailureHandler | `weblog-module-jwt/.../LoginAuthenticationFailureHandler.java` | 登录失败返回错误码 JSON |
-| RestAuthenticationEntryPoint | `weblog-module-jwt/.../RestAuthenticationEntryPoint.java` | Token 过期/缺失 → 401 JSON |
-| UserDetailServiceImpl | `weblog-module-admin/.../service/impl/UserDetailServiceImpl.java` | 查 DB 返回 UserDetails（用户名 + 哈希密码 + 角色） |
+| StpInterfaceImpl | `weblog-module-admin/.../config/StpInterfaceImpl.java` | sa-token 权限加载：从 DB 查询用户角色，每次请求自动调用 |
+| ResultUtil | `weblog-module-jwt/.../utils/ResultUtil.java` | 向 HttpServletResponse 写 JSON 的工具 |
 
 #### 前端关键文件
 
@@ -168,10 +163,10 @@ t_blog_setting             ← 博客设置单例表（只有一行，id=1）
 
 #### 设计要点
 
-- **为什么两个 Filter？** 登录 Filter 只处理一次登录请求，Token Filter 处理所有后续请求。职责分离
-- **密码在哪校验？** 不在你写的代码中，在 Spring Security 的 `DaoAuthenticationProvider.authenticate()` 内部，调用 `BCryptPasswordEncoder.matches()`
-- **Token 过期后怎么办？** `JwtTokenHelper.validateToken()` 返回 false → `TokenAuthenticationFilter` 不注入 SecurityContext → `FilterSecurityInterceptor` 拒绝访问 → `RestAuthenticationEntryPoint` 返回 401 → 前端 Axios 拦截器清 Cookie 并重定向
-- **Token 不存角色**：角色在每次请求时由 `TokenAuthenticationFilter` 重新从 DB 加载。这样角色变更无需等 Token 过期
+- **为什么选择 sa-token 而不是 Spring Security？** sa-token 更轻量：登录 `StpUtil.login()` 一句话，校验 `StpUtil.checkLogin()` 一行代码，无需理解过滤器链、AuthenticationManager、Provider 等概念
+- **密码在哪校验？** 在 `AuthController.login()` 中手动调用 `BCryptPasswordEncoder.matches()`
+- **Token 过期后怎么办？** sa-token 自动校验 Token 有效期，过期自动返回 401 → 前端 Axios 拦截器清 Cookie 并重定向
+- **Token 不存角色**：角色由 `StpInterfaceImpl` 每次请求从 DB 实时加载。这样角色变更无需等 Token 过期
 
 ---
 
@@ -327,7 +322,7 @@ NAME like UPPER(CONCAT('%', key, '%')) OR NAME LIKE LOWER(CONCAT('%', key, '%'))
 | 维度 | weblog-web（前台） | weblog-module-admin（后台） |
 |------|-------------------|----------------------------|
 | URL 前缀 | `/index`, `/article`, `/category` 等 | `/admin/*` |
-| 认证 | 无需认证 | Spring Security 保护 |
+| 认证 | 无需认证 | sa-token 保护 |
 | 读/写 | 只读展示 | 完整 CRUD |
 | 特殊行为 | 读文章时发 EventBus PV 事件 | 无 |
 
@@ -460,14 +455,7 @@ web 模块两个转换器（`componentModel = "spring"`）：`ArticleConvert`（
 
 | 文件 | 路径缩写 | 作用 |
 |------|---------|------|
-| JwtAuthenticationLoginFilter.java | `jwt/JwtAuthenticationLoginFilter.java` | 登录过滤器：拦截 POST /login，解析 JSON 凭证，触发生成 Token |
-| JwtAuthenticationSecurityConfig.java | `jwt/JwtAuthenticationSecurityConfig.java` | 组装 DaoAuthenticationProvider，注册登录 Filter |
-| JwtTokenHelper.java | `jwt/JwtTokenHelper.java` | Token 生成/校验/解析（jjwt 库） |
-| TokenAuthenticationFilter.java | `jwt/TokenAuthenticationFilter.java` | 后续请求过滤器：提取 Token → 校验 → 重建 SecurityContext |
-| LoginAuthenticationSuccessHandler.java | `jwt/LoginAuthenticationSuccessHandler.java` | 登录成功：生成 Token 并返回 JSON |
-| LoginAuthenticationFailureHandler.java | `jwt/LoginAuthenticationFailureHandler.java` | 登录失败：返回错误码 JSON |
-| RestAuthenticationEntryPoint.java | `jwt/RestAuthenticationEntryPoint.java` | 未认证时返回 401 JSON |
-| RestAccessDeniedHandler.java | `jwt/RestAccessDeniedHandler.java` | 权限不足时返回 JSON |
+| SaTokenConfig.java | `jwt/SaTokenConfig.java` | sa-token 路由拦截：`/admin/**` 需登录，放行 `/login` |
 | ResultUtil.java | `jwt/utils/ResultUtil.java` | 往 HttpServletResponse 写 JSON 的工具 |
 
 #### weblog-module-admin（后台业务层）
@@ -486,6 +474,7 @@ web 模块两个转换器（`componentModel = "spring"`）：`ArticleConvert`（
 | AdminBlogSettingController.java | `admin/controller/AdminBlogSettingController.java` | 博客设置 API（2 个端点） |
 | AdminFileController.java | `admin/controller/AdminFileController.java` | 文件上传 API |
 | AdminUserController.java | `admin/controller/AdminUserController.java` | 用户信息 API |
+| AuthController.java | `jwt/controller/AuthController.java` | 登录接口：验密 → `StpUtil.login()` → 返回 JWT Token |
 | AdminArticleServiceImpl.java | `admin/service/impl/AdminArticleServiceImpl.java` | 文章核心业务（发布/更新/删除/分页，约 400 行，最复杂） |
 | AdminDashboardServiceImpl.java | `admin/service/impl/AdminDashboardServiceImpl.java` | 仪表盘统计 |
 | AdminFileServiceImpl.java | `admin/service/impl/AdminFileServiceImpl.java` | 文件上传业务 |
@@ -493,7 +482,7 @@ web 模块两个转换器（`componentModel = "spring"`）：`ArticleConvert`（
 | AdminTagServiceImpl.java | `admin/service/impl/AdminTagServiceImpl.java` | 标签管理业务 |
 | AdminBlogSettingServiceImpl.java | `admin/service/impl/AdminBlogSettingServiceImpl.java` | 博客设置业务 |
 | AdminUserServiceImpl.java | `admin/service/impl/AdminUserServiceImpl.java` | 用户信息/密码修改业务 |
-| UserDetailServiceImpl.java | `admin/service/impl/UserDetailServiceImpl.java` | Spring Security UserDetailsService 实现 |
+| StpInterfaceImpl.java | `admin/config/StpInterfaceImpl.java` | sa-token 权限加载：从 DB 查询用户角色 |
 | PVIncreaseAsyncTask.java | `admin/async/PVIncreaseAsyncTask.java` | @Async PV 自增 |
 | AdminEventListener.java | `admin/eventbus/AdminEventListener.java` | Guava EventBus @Subscribe 监听 |
 | MinioUtil.java | `admin/utils/MinioUtil.java` | Minio 文件上传/删除工具 |
@@ -579,7 +568,7 @@ web 模块两个转换器（`componentModel = "spring"`）：`ArticleConvert`（
 ### 已完成阶段：代码走读（9 个模块）
 
 - [x] 1. 项目骨架 — POM 结构、启动入口、配置文件、数据库表设计、前端外壳
-- [x] 2. 登录认证 — Spring Security + JWT 双过滤器全链路
+- [x] 2. 登录认证 — sa-token JWT 模式（拦截器 + StpUtil）
 - [x] 3. 仪表盘 — PV 统计、发布热图、访客记录
 - [x] 4. 文章管理 — CRUD、多对多关联、Markdown、Minio 图片上传
 - [x] 5. 分类管理 — DAO/Mapper 双层模式
@@ -617,7 +606,7 @@ web 模块两个转换器（`componentModel = "spring"`）：`ArticleConvert`（
 我在学习一个名为 WeBlog 的开源博客项目。以下是项目概况，请基于此回答我的问题。
 
 **项目路径：** E:\WeBlog
-**后端：** Spring Boot 2.6.3 + MyBatis Plus 3.5.2 + Spring Security + JWT + Minio + Guava EventBus
+**后端：** Spring Boot 2.6.3 + MyBatis Plus 3.5.2 + sa-token + Minio + Guava EventBus
 **前端：** Vue 3.2 + Vite 4.3 + Element Plus + ECharts + Vuex + Vue Router (hash)
 **数据库：** MySQL 5.7
 **模块结构：** common(基础设施) → jwt(认证) → admin(后台业务) → web(启动入口+前台展示)
@@ -631,9 +620,9 @@ web 模块两个转换器（`componentModel = "spring"`）：`ArticleConvert`（
 # 问认证流程
 请帮我追踪 WeBlog 的完整登录认证链路。
 关键文件：
-- JwtAuthenticationLoginFilter.java (POST /login 拦截)
-- JwtTokenHelper.java (Token 生成/校验)
-- TokenAuthenticationFilter.java (后续请求 Token 校验)
+- SaTokenConfig.java (路由拦截配置)
+- AuthController.java (登录接口 + BCrypt 验密 + StpUtil.login())
+- StpInterfaceImpl.java (DB 角色加载)
 - login.vue → axios.js → permission.js (前端流程)
 
 # 问文章管理
