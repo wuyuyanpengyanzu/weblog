@@ -1,4 +1,4 @@
-package com.example.weblog.admin.config;
+package com.example.weblog.jwt;
 
 import cn.dev33.satoken.stp.StpInterface;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
